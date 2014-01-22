@@ -53,6 +53,10 @@ func (f *RequestArgs) Add(name string, value interface{}) {
   f.params[name] = value
 }
 
+type ErrorWithCode interface {
+  error
+  ErrorCode() string
+}
 // Error represent error from Kinesis API
 type Error struct {
   // HTTP status code (200, 403, ...)
@@ -70,22 +74,34 @@ func (err *Error) Error() string {
   }
   return fmt.Sprintf("%s (%s)", err.Message, err.Code)
 }
+// ErrorCode returns the error code.
+func (err *Error) ErrorCode() string {
+  return err.Code
+}
 
-type jsonErrors struct {
-  Message   string
+type jsonErrors map[string]interface{}
+
+func (e jsonErrors) getString(key string) (s string) {
+  if value, ok := e[key]; ok {
+    s, _ = value.(string)
+  }
+  return
 }
 
 func buildError(r *http.Response) error {
-  errors := jsonErrors{}
-  json.NewDecoder(r.Body).Decode(&errors)
-
-  var err Error
-  err.Message = errors.Message
-  err.StatusCode = r.StatusCode
-  if err.Message == "" {
-    err.Message = r.Status
+  err := &Error{
+    StatusCode: r.StatusCode,
+    Code: fmt.Sprintf("%v", r.Status),
+    Message: r.Status,
   }
-  return &err
+
+  errors := jsonErrors{}
+  if e := json.NewDecoder(r.Body).Decode(&errors); e == nil {
+    err.Message = errors.getString("message")
+    err.Code = errors.getString("__type")
+  }
+
+  return err
 }
 
 // Query by AWS API
