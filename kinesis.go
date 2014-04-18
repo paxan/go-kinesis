@@ -3,6 +3,7 @@ package kinesis
 
 import (
   "encoding/json"
+  "encoding/base64"
   "fmt"
   "net/http"
   "strings"
@@ -29,7 +30,7 @@ func New(access_key, secret_key string) *Kinesis {
     AccessKey: access_key,
     SecretKey: secret_key,
   }
-  return &Kinesis{client: NewClient(keys), Version: "20131104", Region: "us-east-1"}
+  return &Kinesis{client: NewClient(keys), Version: "20131202", Region: "us-east-1"}
 }
 
 // Create params object for request
@@ -53,10 +54,18 @@ func (f *RequestArgs) Add(name string, value interface{}) {
   f.params[name] = value
 }
 
+func (f *RequestArgs) AddData(value []byte) {
+  enc := base64.StdEncoding
+  buf := make([]byte, enc.EncodedLen(len(value)))
+  enc.Encode(buf, value)
+  f.params["Data"] = buf
+}
+
 type ErrorWithCode interface {
   error
   ErrorCode() string
 }
+
 // Error represent error from Kinesis API
 type Error struct {
   // HTTP status code (200, 403, ...)
@@ -277,6 +286,13 @@ type GetRecordsRecords struct {
   Data                      []byte
   PartitionKey              string
   SequenceNumber            string
+}
+
+func (r GetRecordsRecords) GetData() ([]byte, error) {
+  enc := base64.StdEncoding
+  dbuf := make([]byte, enc.DecodedLen(len(r.Data)))
+  n, err := enc.Decode(dbuf, r.Data)
+  return dbuf[:n], err
 }
 // GetNextRecordsResp stores the information that provides by GetNextRecords API call
 type GetRecordsResp struct {
